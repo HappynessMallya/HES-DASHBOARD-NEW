@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { MeterSelector } from "@/components/shared/meter-selector";
 import { StatCard } from "@/components/shared/stat-card";
-import { api, getWsUrl } from "@/lib/api";
+import { api } from "@/lib/api";
 import { formatNumber } from "@/lib/utils";
 import type { MeterOut, LiveReadResponse } from "@/lib/types";
 import {
@@ -51,6 +51,25 @@ const SERIES_CONFIG: Record<string, { color: string; icon: typeof Zap; unit: str
 
 const MAX_POINTS = 60;
 
+// Use SSE proxy in production (HTTPS), direct WebSocket locally
+function getLiveUrl(meterId: string, interval: string, objects: string[]): { type: "sse" | "ws"; url: string } {
+  const isHttps = typeof window !== "undefined" && window.location.protocol === "https:";
+
+  if (isHttps) {
+    // SSE proxy through Next.js API route
+    const params = new URLSearchParams({
+      interval,
+      objects: objects.join(","),
+    });
+    return { type: "sse", url: `/api/ws/${meterId}?${params}` };
+  }
+
+  // Direct WebSocket for local dev
+  const directUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+  const wsBase = directUrl.replace(/^http/, "ws");
+  return { type: "ws", url: `${wsBase}/ws/meters/${meterId}/live` };
+}
+
 export default function LiveReadingsPage() {
   const [meters, setMeters] = useState<MeterOut[]>([]);
   const [selectedMeter, setSelectedMeter] = useState("");
@@ -62,7 +81,7 @@ export default function LiveReadingsPage() {
   const [latestReading, setLatestReading] = useState<Record<string, number | null>>({});
   const [chartData, setChartData] = useState<Record<string, unknown>[]>([]);
 
-  const wsRef = useRef<WebSocket | null>(null);
+  const connectionRef = useRef<EventSource | WebSocket | null>(null);
   const reconnectRef = useRef<number>(0);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -72,77 +91,127 @@ export default function LiveReadingsPage() {
       .catch(() => toast.error("Failed to load meters"));
   }, []);
 
+  const handleReading = useCallback((data: LiveReadResponse) => {
+    setLatestReading(data.readings);
+    setChartData((prev) => {
+      const point: Record<string, unknown> = {
+        time: format(new Date(data.timestamp), "HH:mm:ss"),
+      };
+      for (const [key, val] of Object.entries(data.readings)) {
+        point[key] = val;
+      }
+      const next = [...prev, point];
+      return next.length > MAX_POINTS ? next.slice(-MAX_POINTS) : next;
+    });
+  }, []);
+
   const cleanup = useCallback(() => {
     if (reconnectTimerRef.current) {
       clearTimeout(reconnectTimerRef.current);
       reconnectTimerRef.current = null;
     }
-    if (wsRef.current) {
-      wsRef.current.close();
-      wsRef.current = null;
+    if (connectionRef.current) {
+      if (connectionRef.current instanceof EventSource) {
+        connectionRef.current.close();
+      } else {
+        connectionRef.current.close();
+      }
+      connectionRef.current = null;
     }
     setConnected(false);
   }, []);
 
-  const connectWs = useCallback(() => {
+  const scheduleReconnect = useCallback((connectFn: () => void) => {
+    const delay = Math.min(1000 * Math.pow(2, reconnectRef.current), 30000);
+    reconnectRef.current++;
+    reconnectTimerRef.current = setTimeout(connectFn, delay);
+  }, []);
+
+  const connectStream = useCallback(() => {
     if (!selectedMeter) return;
     cleanup();
 
-    const url = getWsUrl(selectedMeter);
-    const ws = new WebSocket(url);
-    wsRef.current = ws;
+    const objectsArray = Array.from(selectedObjects);
+    const { type, url } = getLiveUrl(selectedMeter, interval, objectsArray);
 
-    ws.onopen = () => {
-      setConnected(true);
-      reconnectRef.current = 0;
-      // Send config
-      ws.send(
-        JSON.stringify({
-          interval: Number(interval),
-          objects: Array.from(selectedObjects),
-        })
-      );
-    };
+    if (type === "sse") {
+      // SSE mode (production via Vercel proxy)
+      const es = new EventSource(url);
+      connectionRef.current = es;
 
-    ws.onmessage = (event) => {
-      try {
-        const data: LiveReadResponse = JSON.parse(event.data);
-        setLatestReading(data.readings);
-        setChartData((prev) => {
-          const point: Record<string, unknown> = {
-            time: format(new Date(data.timestamp), "HH:mm:ss"),
-          };
-          for (const [key, val] of Object.entries(data.readings)) {
-            point[key] = val;
-          }
-          const next = [...prev, point];
-          return next.length > MAX_POINTS ? next.slice(-MAX_POINTS) : next;
-        });
-      } catch {
-        // Ignore parse errors
-      }
-    };
+      es.addEventListener("connected", () => {
+        setConnected(true);
+        reconnectRef.current = 0;
+      });
 
-    ws.onclose = () => {
-      setConnected(false);
-      // Exponential backoff reconnect
-      const delay = Math.min(1000 * Math.pow(2, reconnectRef.current), 30000);
-      reconnectRef.current++;
-      reconnectTimerRef.current = setTimeout(() => {
-        if (wsRef.current === ws) {
-          connectWs();
+      es.addEventListener("reading", (event) => {
+        try {
+          const data: LiveReadResponse = JSON.parse(event.data);
+          handleReading(data);
+        } catch {
+          // Ignore parse errors
         }
-      }, delay);
-    };
+      });
 
-    ws.onerror = () => {
-      // onclose will fire after onerror
-    };
-  }, [selectedMeter, interval, selectedObjects, cleanup]);
+      es.addEventListener("disconnected", () => {
+        setConnected(false);
+        es.close();
+        scheduleReconnect(connectStream);
+      });
+
+      es.addEventListener("error", () => {
+        setConnected(false);
+        es.close();
+        scheduleReconnect(connectStream);
+      });
+
+      es.onerror = () => {
+        if (es.readyState === EventSource.CLOSED) {
+          setConnected(false);
+          scheduleReconnect(connectStream);
+        }
+      };
+    } else {
+      // WebSocket mode (local dev)
+      const ws = new WebSocket(url);
+      connectionRef.current = ws;
+
+      ws.onopen = () => {
+        setConnected(true);
+        reconnectRef.current = 0;
+        ws.send(
+          JSON.stringify({
+            interval: Number(interval),
+            objects: objectsArray,
+          })
+        );
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const data: LiveReadResponse = JSON.parse(event.data);
+          handleReading(data);
+        } catch {
+          // Ignore parse errors
+        }
+      };
+
+      ws.onclose = () => {
+        setConnected(false);
+        scheduleReconnect(connectStream);
+      };
+
+      ws.onerror = () => {
+        // onclose will fire after onerror
+      };
+    }
+  }, [selectedMeter, interval, selectedObjects, cleanup, handleReading, scheduleReconnect]);
 
   const disconnect = useCallback(() => {
-    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({ stop: true }));
+    if (connectionRef.current instanceof WebSocket) {
+      if (connectionRef.current.readyState === WebSocket.OPEN) {
+        connectionRef.current.send(JSON.stringify({ stop: true }));
+      }
     }
     cleanup();
     reconnectRef.current = 0;
@@ -201,7 +270,7 @@ export default function LiveReadingsPage() {
                 </Button>
               ) : (
                 <Button
-                  onClick={connectWs}
+                  onClick={connectStream}
                   disabled={!selectedMeter}
                   className="bg-[#16a34a] hover:bg-[#15803d]"
                 >
