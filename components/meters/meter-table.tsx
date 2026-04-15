@@ -107,10 +107,12 @@ export function MeterTable({
               )}
               <TableCell className="text-right">
                 <div className="flex items-center justify-end gap-1">
-                  <Button variant="ghost" size="sm" render={<Link href={`/meters/${meter.id}`} />} aria-label={`View meter ${meter.serial_number}`}>
-                    <Eye className="h-4 w-4" />
-                    View
-                  </Button>
+                  <Link href={`/meters/${meter.id}`}>
+                    <Button variant="ghost" size="sm" aria-label={`View meter ${meter.serial_number}`}>
+                      <Eye className="h-4 w-4" />
+                      View
+                    </Button>
+                  </Link>
                   {showDelete && onDelete && (
                     <ConfirmDialog
                       trigger={
