@@ -21,17 +21,13 @@ import {
   Wallet,
 } from "lucide-react";
 import { toast } from "sonner";
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip as RechartTooltip,
-  Legend,
-  ResponsiveContainer,
-} from "recharts";
+import dynamic from "next/dynamic";
 import { format } from "date-fns";
+
+const LiveChart = dynamic(
+  () => import("@/components/live/live-chart").then((m) => m.LiveChart),
+  { ssr: false }
+);
 
 const AVAILABLE_OBJECTS = [
   { key: "energy", label: "Energy" },
@@ -343,32 +339,7 @@ export default function LiveReadingsPage() {
             <CardTitle className="text-[#14532d]">Real-Time Chart</CardTitle>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={350}>
-              <LineChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#bbf7d0" />
-                <XAxis dataKey="time" tick={{ fontSize: 12 }} />
-                <YAxis tick={{ fontSize: 12 }} />
-                <RechartTooltip />
-                <Legend />
-                {Array.from(selectedObjects).map((key) => {
-                  const cfg = SERIES_CONFIG[key];
-                  if (!cfg) return null;
-                  return (
-                    <Line
-                      key={key}
-                      type="monotone"
-                      dataKey={key}
-                      name={`${key} (${cfg.unit})`}
-                      stroke={cfg.color}
-                      strokeWidth={2}
-                      dot={false}
-                      connectNulls
-                      isAnimationActive={false}
-                    />
-                  );
-                })}
-              </LineChart>
-            </ResponsiveContainer>
+            <LiveChart data={chartData} selectedObjects={selectedObjects} />
           </CardContent>
         </Card>
       )}

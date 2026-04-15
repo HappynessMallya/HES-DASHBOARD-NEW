@@ -25,17 +25,13 @@ import { formatNumber, fullDateTime } from "@/lib/utils";
 import type { ReadingOut } from "@/lib/types";
 import { Search, Download, Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip as RechartTooltip,
-  Legend,
-  ResponsiveContainer,
-} from "recharts";
+import dynamic from "next/dynamic";
 import { format } from "date-fns";
+
+const ReadingsChart = dynamic(
+  () => import("@/components/meters/readings-chart").then((m) => m.ReadingsChart),
+  { ssr: false }
+);
 
 interface ReadingsHistoryTabProps {
   meterId: string;
@@ -200,30 +196,7 @@ export function ReadingsHistoryTab({ meterId }: ReadingsHistoryTabProps) {
         <Skeleton className="h-72 w-full" />
       ) : chartData.length > 0 ? (
         <div className="rounded-lg border border-[#bbf7d0] bg-white p-4">
-          <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={chartData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#bbf7d0" />
-              <XAxis dataKey="time" tick={{ fontSize: 12 }} />
-              <YAxis tick={{ fontSize: 12 }} />
-              <RechartTooltip />
-              <Legend />
-              {SERIES.map(
-                (s) =>
-                  visibleSeries.has(s.key) && (
-                    <Line
-                      key={s.key}
-                      type="monotone"
-                      dataKey={s.key}
-                      name={s.label}
-                      stroke={s.color}
-                      strokeWidth={2}
-                      dot={false}
-                      connectNulls
-                    />
-                  )
-              )}
-            </LineChart>
-          </ResponsiveContainer>
+          <ReadingsChart data={chartData} visibleSeries={visibleSeries} />
         </div>
       ) : (
         <div className="rounded-lg border border-[#bbf7d0] bg-[#f0fdf4] p-8 text-center">
