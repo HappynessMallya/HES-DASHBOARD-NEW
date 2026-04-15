@@ -6,31 +6,34 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ path: string[] }> }
 ) {
-  return proxy(request, await params);
+  return proxyRequest(request, await params);
 }
 
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ path: string[] }> }
 ) {
-  return proxy(request, await params);
+  return proxyRequest(request, await params);
 }
 
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ path: string[] }> }
 ) {
-  return proxy(request, await params);
+  return proxyRequest(request, await params);
 }
 
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ path: string[] }> }
 ) {
-  return proxy(request, await params);
+  return proxyRequest(request, await params);
 }
 
-async function proxy(request: NextRequest, params: { path: string[] }) {
+async function proxyRequest(
+  request: NextRequest,
+  params: { path: string[] }
+) {
   const path = "/" + params.path.join("/");
   const url = new URL(path, BACKEND_URL);
 
@@ -39,9 +42,22 @@ async function proxy(request: NextRequest, params: { path: string[] }) {
     url.searchParams.set(key, value);
   });
 
-  const headers: HeadersInit = {
-    "Content-Type": "application/json",
-  };
+  // Build headers — forward auth token from cookie
+  const headers: HeadersInit = {};
+
+  const contentType = request.headers.get("Content-Type");
+  if (contentType && !contentType.includes("multipart/form-data")) {
+    headers["Content-Type"] = contentType;
+  } else if (!contentType) {
+    headers["Content-Type"] = "application/json";
+  }
+  // For multipart/form-data, don't set Content-Type — let fetch set it with boundary
+
+  // Forward auth token from httpOnly cookie
+  const token = request.cookies.get("hes_token")?.value;
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
 
   const init: RequestInit = {
     method: request.method,
@@ -49,8 +65,13 @@ async function proxy(request: NextRequest, params: { path: string[] }) {
   };
 
   if (request.method !== "GET" && request.method !== "HEAD") {
-    const body = await request.text();
-    if (body) init.body = body;
+    if (contentType?.includes("multipart/form-data")) {
+      // Forward FormData as-is
+      init.body = await request.arrayBuffer();
+    } else {
+      const body = await request.text();
+      if (body) init.body = body;
+    }
   }
 
   try {
@@ -63,7 +84,7 @@ async function proxy(request: NextRequest, params: { path: string[] }) {
         "Content-Type": res.headers.get("Content-Type") || "application/json",
       },
     });
-  } catch (error) {
+  } catch {
     return NextResponse.json(
       { detail: "Backend unreachable" },
       { status: 502 }

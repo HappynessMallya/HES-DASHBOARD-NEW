@@ -10,6 +10,16 @@ const routeLabels: Record<string, string> = {
   meters: "Meters",
   live: "Live Readings",
   health: "Health Status",
+  groups: "Device Groups",
+  alerts: "Alerts",
+  map: "GIS Map",
+  firmware: "Firmware",
+  performance: "Performance",
+  reports: "Reports",
+  mdms: "MDMS Interface",
+  admin: "Administration",
+  users: "User Management",
+  import: "Batch Import",
 };
 
 export function Breadcrumb() {

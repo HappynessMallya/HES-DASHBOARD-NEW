@@ -12,6 +12,7 @@ import { EventsTamperTab } from "@/components/meters/events-tamper-tab";
 import { RelayControlTab } from "@/components/meters/relay-control-tab";
 import { ScheduleTab } from "@/components/meters/schedule-tab";
 import { TimeSyncTab } from "@/components/meters/time-sync-tab";
+import { ConfigTab } from "@/components/meters/config-tab";
 import { api } from "@/lib/api";
 import { relativeTime, fullDateTime } from "@/lib/utils";
 import type { MeterOut } from "@/lib/types";
@@ -23,6 +24,7 @@ import {
   Power,
   Calendar,
   Clock,
+  Settings,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -134,6 +136,10 @@ export default function MeterDetailPage({
             <Clock className="h-4 w-4" />
             Time Sync
           </TabsTrigger>
+          <TabsTrigger value="config" className="gap-1.5 data-[state=active]:bg-[#16a34a] data-[state=active]:text-white">
+            <Settings className="h-4 w-4" />
+            Configuration
+          </TabsTrigger>
         </TabsList>
 
         <div className="mt-6">
@@ -157,6 +163,9 @@ export default function MeterDetailPage({
           </TabsContent>
           <TabsContent value="timesync">
             <TimeSyncTab meterId={id} />
+          </TabsContent>
+          <TabsContent value="config">
+            <ConfigTab meterId={id} />
           </TabsContent>
         </div>
       </Tabs>

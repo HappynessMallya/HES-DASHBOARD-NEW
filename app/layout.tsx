@@ -1,9 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import { Sidebar } from "@/components/layout/sidebar";
-import { Breadcrumb } from "@/components/layout/breadcrumb";
-import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
 const geistSans = Geist({
@@ -32,16 +29,7 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full bg-white">
-        <TooltipProvider>
-          <Sidebar />
-          <main className="lg:pl-60">
-            <div className="px-4 py-6 pt-20 lg:px-8 lg:pt-6">
-              <Breadcrumb />
-              {children}
-            </div>
-          </main>
-          <Toaster richColors position="top-right" />
-        </TooltipProvider>
+        <TooltipProvider>{children}</TooltipProvider>
       </body>
     </html>
   );
