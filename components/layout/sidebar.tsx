@@ -11,6 +11,7 @@ import {
   Gauge,
   Radio,
   Bell,
+  BellRing,
   HeartPulse,
   Menu,
   Zap,
@@ -24,6 +25,9 @@ import {
   Users,
   LogOut,
   User,
+  Settings2,
+  Shield,
+  Lock,
 } from "lucide-react";
 import { useState } from "react";
 import { AlertBell } from "@/components/shared/alert-bell";
@@ -61,6 +65,7 @@ const navGroups: NavGroup[] = [
     label: "Devices",
     items: [
       { href: "/meters", label: "Meters", icon: Gauge },
+      { href: "/profiles", label: "Meter Profiles", icon: Settings2 },
       {
         href: "/meters/import",
         label: "Batch Import",
@@ -77,11 +82,18 @@ const navGroups: NavGroup[] = [
     ],
   },
   {
+    label: "Network",
+    items: [
+      { href: "/topology", label: "Topology", icon: Network },
+      { href: "/map", label: "GIS Map", icon: MapPin },
+    ],
+  },
+  {
     label: "Monitoring",
     items: [
       { href: "/live", label: "Live Readings", icon: Radio },
       { href: "/alerts", label: "Alerts", icon: Bell },
-      { href: "/map", label: "GIS Map", icon: MapPin },
+      { href: "/notifications", label: "Notifications", icon: BellRing },
     ],
   },
   {
@@ -98,6 +110,18 @@ const navGroups: NavGroup[] = [
         href: "/admin/users",
         label: "User Management",
         icon: Users,
+        requiredRole: "user_admin",
+      },
+      {
+        href: "/admin/roles",
+        label: "Role Management",
+        icon: Shield,
+        requiredRole: "user_admin",
+      },
+      {
+        href: "/admin/permissions",
+        label: "Permissions",
+        icon: Lock,
         requiredRole: "user_admin",
       },
       { href: "/health", label: "Health Status", icon: HeartPulse },

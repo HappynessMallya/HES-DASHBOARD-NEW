@@ -21,7 +21,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Plus, Loader2 } from "lucide-react";
-import { api } from "@/lib/api";
+import { useCreateMeter } from "@/lib/hooks/use-meters";
+import { useProfiles } from "@/lib/hooks/use-profiles";
 import type { MeterCreate, MeterOut } from "@/lib/types";
 import { toast } from "sonner";
 
@@ -31,14 +32,15 @@ interface RegisterMeterDialogProps {
 
 export function RegisterMeterDialog({ onCreated }: RegisterMeterDialogProps) {
   const [open, setOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
   const [form, setForm] = useState<MeterCreate>({
     serial_number: "",
     ip_address: "",
     port: 4059,
     auth_password: "",
-    security_level: "LLS",
+    security_level: "HIGH_GMAC",
   });
+  const createMeter = useCreateMeter();
+  const { data: profiles } = useProfiles();
 
   const handleSubmit = useCallback(
     async (e: React.FormEvent) => {
@@ -47,15 +49,11 @@ export function RegisterMeterDialog({ onCreated }: RegisterMeterDialogProps) {
         toast.error("Serial number is required");
         return;
       }
-      setLoading(true);
       try {
-        const meter = await api<MeterOut>("/api/meters", {
-          method: "POST",
-          body: JSON.stringify({
-            ...form,
-            ip_address: form.ip_address || null,
-            auth_password: form.auth_password || "",
-          }),
+        const meter = await createMeter.mutateAsync({
+          ...form,
+          ip_address: form.ip_address || null,
+          auth_password: form.auth_password || "",
         });
         toast.success(`Meter ${meter.serial_number} registered successfully`);
         onCreated(meter);
@@ -65,15 +63,13 @@ export function RegisterMeterDialog({ onCreated }: RegisterMeterDialogProps) {
           ip_address: "",
           port: 4059,
           auth_password: "",
-          security_level: "LLS",
+          security_level: "HIGH_GMAC",
         });
       } catch (err) {
         toast.error(err instanceof Error ? err.message : "Failed to register meter");
-      } finally {
-        setLoading(false);
       }
     },
-    [form, onCreated]
+    [form, onCreated, createMeter]
   );
 
   return (
@@ -96,7 +92,7 @@ export function RegisterMeterDialog({ onCreated }: RegisterMeterDialogProps) {
               id="serial_number"
               value={form.serial_number}
               onChange={(e) => setForm((f) => ({ ...f, serial_number: e.target.value }))}
-              placeholder="e.g. METER-001"
+              placeholder="e.g. 0199100227362"
               required
             />
           </div>
@@ -106,9 +102,7 @@ export function RegisterMeterDialog({ onCreated }: RegisterMeterDialogProps) {
               id="ip_address"
               value={form.ip_address || ""}
               onChange={(e) => setForm((f) => ({ ...f, ip_address: e.target.value }))}
-              placeholder="e.g. 192.168.1.100"
-              pattern="^(\d{1,3}\.){3}\d{1,3}$"
-              title="Enter a valid IPv4 address"
+              placeholder="e.g. 154.74.127.115"
             />
           </div>
           <div className="grid grid-cols-2 gap-4">
@@ -133,28 +127,49 @@ export function RegisterMeterDialog({ onCreated }: RegisterMeterDialogProps) {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="HIGH_GMAC">HIGH_GMAC</SelectItem>
                   <SelectItem value="LLS">LLS</SelectItem>
                   <SelectItem value="HLS">HLS</SelectItem>
                 </SelectContent>
               </Select>
             </div>
           </div>
+          {profiles && profiles.length > 0 && (
+            <div className="space-y-2">
+              <Label htmlFor="profile_id">Connection Profile</Label>
+              <Select
+                value={form.profile_id ? String(form.profile_id) : ""}
+                onValueChange={(v) => setForm((f) => ({ ...f, profile_id: v ? Number(v) : undefined }))}
+              >
+                <SelectTrigger id="profile_id">
+                  <SelectValue placeholder="Select profile (optional)" />
+                </SelectTrigger>
+                <SelectContent>
+                  {profiles.map((p) => (
+                    <SelectItem key={p.id} value={String(p.id)}>
+                      {p.name} {p.manufacturer ? `(${p.manufacturer})` : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
           <div className="space-y-2">
-            <Label htmlFor="auth_password">Auth Password</Label>
+            <Label htmlFor="auth_password">Auth Password (hex)</Label>
             <Input
               id="auth_password"
               type="password"
               value={form.auth_password}
               onChange={(e) => setForm((f) => ({ ...f, auth_password: e.target.value }))}
-              placeholder="Optional"
+              placeholder="e.g. 3132333435363738"
             />
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>
               Cancel
             </Button>
-            <Button type="submit" disabled={loading} className="bg-[#16a34a] hover:bg-[#15803d]">
-              {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            <Button type="submit" disabled={createMeter.isPending} className="bg-[#16a34a] hover:bg-[#15803d]">
+              {createMeter.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Register
             </Button>
           </DialogFooter>

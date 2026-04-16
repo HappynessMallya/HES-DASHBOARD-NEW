@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useCallback } from "react";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -11,53 +11,31 @@ import {
 } from "@/components/ui/select";
 import { MeterTable } from "@/components/meters/meter-table";
 import { RegisterMeterDialog } from "@/components/meters/register-meter-dialog";
-import { api } from "@/lib/api";
+import { useMeters, useDeleteMeter } from "@/lib/hooks/use-meters";
 import type { MeterOut } from "@/lib/types";
 import { Search } from "lucide-react";
 import { toast } from "sonner";
 
 export default function MetersPage() {
-  const [meters, setMeters] = useState<MeterOut[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data: meters, isLoading } = useMeters();
+  const deleteMeter = useDeleteMeter();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
-
-  const fetchMeters = useCallback(async () => {
-    try {
-      const data = await api<MeterOut[]>("/api/meters");
-      setMeters(data);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to fetch meters");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchMeters();
-  }, [fetchMeters]);
 
   const handleDelete = useCallback(
     async (id: string) => {
       try {
-        await api(`/api/meters/${id}`, { method: "DELETE" });
+        await deleteMeter.mutateAsync(id);
         toast.success("Meter deleted");
-        setMeters((prev) => prev.filter((m) => m.id !== id));
       } catch (err) {
         toast.error(err instanceof Error ? err.message : "Failed to delete meter");
       }
     },
-    []
+    [deleteMeter]
   );
 
-  const handleCreated = useCallback(
-    (meter: MeterOut) => {
-      setMeters((prev) => [meter, ...prev]);
-    },
-    []
-  );
-
-  const filtered = meters.filter((m) => {
+  const meterList = meters ?? [];
+  const filtered = meterList.filter((m) => {
     const matchSearch =
       !search || m.serial_number.toLowerCase().includes(search.toLowerCase());
     const matchStatus =
@@ -71,7 +49,7 @@ export default function MetersPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-[#14532d]">Meter Management</h1>
-        <RegisterMeterDialog onCreated={handleCreated} />
+        <RegisterMeterDialog onCreated={() => {}} />
       </div>
 
       <div className="flex flex-wrap items-center gap-4">
@@ -99,7 +77,7 @@ export default function MetersPage() {
 
       <MeterTable
         meters={filtered}
-        loading={loading}
+        loading={isLoading}
         showDelete
         showCreatedAt
         onDelete={handleDelete}

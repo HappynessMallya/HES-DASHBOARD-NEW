@@ -1,13 +1,28 @@
 // --- Auth / RBAC ---
 export type Role = "data_access" | "operations" | "device_management" | "user_admin";
 
+export interface Permission {
+  code: string;
+  module: string;
+  description?: string;
+}
+
+export interface RoleOut {
+  id: number;
+  name: string;
+  permissions?: string[];
+}
+
 export interface User {
   id: string;
   username: string;
   email: string;
   full_name: string;
-  roles: Role[];
+  role: RoleOut;
+  roles: Role[]; // kept for backward compat with existing pages
   is_active: boolean;
+  created_at?: string;
+  permissions: string[];
 }
 
 export interface LoginRequest {
@@ -26,7 +41,8 @@ export interface UserCreate {
   email: string;
   full_name: string;
   password: string;
-  roles: Role[];
+  role_id?: number;
+  roles?: Role[];
 }
 
 export interface UserOut {
@@ -34,10 +50,17 @@ export interface UserOut {
   username: string;
   email: string;
   full_name: string;
+  role: RoleOut;
   roles: Role[];
   is_active: boolean;
   created_at: string;
   last_login: string | null;
+  permissions: string[];
+}
+
+export interface ChangePasswordRequest {
+  current_password: string;
+  new_password: string;
 }
 
 // --- Meter ---
@@ -47,6 +70,7 @@ export interface MeterCreate {
   port?: number;
   auth_password?: string;
   security_level?: string;
+  profile_id?: number;
 }
 
 export interface MeterOut {
@@ -55,9 +79,51 @@ export interface MeterOut {
   ip_address: string | null;
   port: number;
   security_level: string;
+  profile_id?: number;
   is_online: boolean;
   last_seen: string | null;
   created_at: string;
+}
+
+// --- Meter Profiles ---
+export interface SecurityParams {
+  password_hex?: boolean;
+  security_mode?: string;
+  system_title_hex?: string;
+  block_cipher_key_hex?: string;
+  authentication_key_hex?: string;
+}
+
+export interface ProfileCreate {
+  name: string;
+  manufacturer?: string;
+  model?: string;
+  handshake?: string;
+  client_address?: number;
+  server_address?: number;
+  auth_type?: string;
+  default_password?: string;
+  security_params?: SecurityParams;
+  obis_overrides?: Record<string, string>;
+  connection_timeout?: number;
+  post_registration_delay_ms?: number;
+}
+
+export interface ProfileOut {
+  id: number;
+  name: string;
+  manufacturer: string | null;
+  model: string | null;
+  handshake: string | null;
+  client_address: number;
+  server_address: number;
+  auth_type: string | null;
+  default_password: string | null;
+  security_params: SecurityParams | null;
+  obis_overrides: Record<string, string> | null;
+  connection_timeout: number;
+  post_registration_delay_ms: number;
+  meter_count: number;
 }
 
 // --- Readings ---
@@ -77,10 +143,22 @@ export interface ReadingOut {
   timestamp: string;
   energy_kwh?: number | null;
   energy_export_kwh?: number | null;
+  balance_kwh?: number | null;
+  values_json?: Record<string, number | string> | null;
+  objects_read?: string[];
   voltage_v?: number | null;
   current_a?: number | null;
   power_kw?: number | null;
-  balance_kwh?: number | null;
+}
+
+// --- OBIS Catalog ---
+export interface OBISCode {
+  name: string;
+  code: string;
+  description: string;
+  unit: string;
+  category: string;
+  cosem_class: number;
 }
 
 // --- Schedule ---
@@ -161,17 +239,51 @@ export interface AlertOut {
   duration_seconds: number | null;
 }
 
+// --- Notification Rules ---
+export type NotificationChannel = "sms" | "email";
+export type NotificationEventType = "tamper" | "offline" | "low_balance" | "reading" | "relay_command" | "topup";
+export type ConditionOperator = "lt" | "gt" | "eq" | "lte" | "gte";
+
 export interface AlertRule {
   id: string;
   name: string;
-  condition_type: string;
-  threshold: number;
-  severity: AlertSeverity;
-  notify_sms: boolean;
-  notify_email: boolean;
+  event_type: NotificationEventType;
+  condition_field?: string;
+  condition_operator?: ConditionOperator;
+  condition_value?: number;
+  channel: NotificationChannel;
   recipients: string[];
-  forward_upstream: boolean;
+  cooldown_minutes?: number;
   enabled: boolean;
+  // backward compat
+  condition_type?: string;
+  threshold?: number;
+  severity?: AlertSeverity;
+  notify_sms?: boolean;
+  notify_email?: boolean;
+  forward_upstream?: boolean;
+}
+
+export interface AlertRuleCreate {
+  name: string;
+  event_type: NotificationEventType;
+  condition_field?: string;
+  condition_operator?: ConditionOperator;
+  condition_value?: number;
+  channel: NotificationChannel;
+  recipients: string[];
+  cooldown_minutes?: number;
+}
+
+export interface NotificationLogEntry {
+  id: string;
+  rule_id: string;
+  channel: NotificationChannel;
+  recipient: string;
+  event_type: string;
+  message: string;
+  sent_at: string;
+  status: "sent" | "failed";
 }
 
 export interface AlertCountResponse {
@@ -247,6 +359,7 @@ export interface FirmwareVersion {
   version: string;
   filename: string;
   device_type: "meter" | "dcu";
+  description?: string;
   size_bytes: number;
   checksum: string;
   uploaded_at: string;
@@ -258,7 +371,7 @@ export interface FirmwareDeployment {
   firmware_id: string;
   firmware_version: string;
   target_ids: string[];
-  status: "pending" | "in_progress" | "completed" | "failed";
+  status: "pending" | "in_progress" | "completed" | "failed" | "cancelled";
   scheduled_at: string | null;
   progress_percent: number;
   started_at: string | null;
@@ -311,7 +424,37 @@ export interface ReportOut {
   generated_at: string | null;
 }
 
+export type ReportType = "readings" | "summary" | "tasks" | "events";
+export type ReportFormat = "json" | "csv" | "excel";
+
+export interface ReportTypeInfo {
+  type: ReportType;
+  name: string;
+  description: string;
+}
+
 // --- GIS / Location ---
+export interface GeoJSONFeature {
+  type: "Feature";
+  geometry: {
+    type: "Point";
+    coordinates: [number, number]; // [lng, lat]
+  };
+  properties: Record<string, unknown>;
+}
+
+export interface GeoJSONFeatureCollection {
+  type: "FeatureCollection";
+  features: GeoJSONFeature[];
+}
+
+export interface GISDashboard {
+  meters: { total: number; online: number; offline: number };
+  dcus: { total: number; online: number };
+  topology: { regions: number; substations: number; transformers: number };
+  last_24h: { readings: number; tamper_events: number };
+}
+
 export interface DeviceLocation {
   id: string;
   serial_number: string;
@@ -332,6 +475,47 @@ export interface DCULocation {
   status: "online" | "offline";
 }
 
+// --- Topology ---
+export interface Region {
+  id: number;
+  name: string;
+  code: string;
+}
+
+export interface Substation {
+  id: number;
+  name: string;
+  region_id: number;
+}
+
+export interface Transformer {
+  id: number;
+  name: string;
+  substation_id: number;
+  rating_kva?: number;
+}
+
+export interface DCU {
+  id: number;
+  serial_number: string;
+  transformer_id: number;
+}
+
+export interface MeterAssignment {
+  region_id?: number;
+  substation_id?: number;
+  transformer_id?: number;
+  latitude?: number;
+  longitude?: number;
+}
+
+export interface BatchAssignment {
+  meter_ids: string[];
+  region_id?: number;
+  substation_id?: number;
+  transformer_id?: number;
+}
+
 // --- MDMS ---
 export interface MDMSStatus {
   connected: boolean;
@@ -349,4 +533,14 @@ export interface MDMSInterface {
   status: "active" | "inactive" | "error";
   last_activity: string | null;
   messages_today: number;
+}
+
+// --- WebSocket ---
+export interface LiveMeterMessage {
+  meter_id: string;
+  serial_number: string;
+  timestamp: string;
+  is_online: boolean;
+  type: "heartbeat" | "reading";
+  readings: Record<string, number>;
 }

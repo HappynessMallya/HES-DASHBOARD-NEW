@@ -69,9 +69,9 @@ export default function UserManagementPage() {
   const toggleRole = (role: Role) => {
     setForm((f) => ({
       ...f,
-      roles: f.roles.includes(role)
-        ? f.roles.filter((r) => r !== role)
-        : [...f.roles, role],
+      roles: (f.roles ?? []).includes(role)
+        ? (f.roles ?? []).filter((r) => r !== role)
+        : [...(f.roles ?? []), role],
     }));
   };
 
@@ -208,7 +208,7 @@ export default function UserManagementPage() {
                             {r.label}
                           </span>
                           <Switch
-                            checked={form.roles.includes(r.key)}
+                            checked={(form.roles ?? []).includes(r.key)}
                             onCheckedChange={() => toggleRole(r.key)}
                           />
                         </div>

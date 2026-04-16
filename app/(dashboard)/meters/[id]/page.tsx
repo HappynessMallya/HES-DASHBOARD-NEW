@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, use } from "react";
+import { use } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -13,9 +13,8 @@ import { RelayControlTab } from "@/components/meters/relay-control-tab";
 import { ScheduleTab } from "@/components/meters/schedule-tab";
 import { TimeSyncTab } from "@/components/meters/time-sync-tab";
 import { ConfigTab } from "@/components/meters/config-tab";
-import { api } from "@/lib/api";
+import { useMeter } from "@/lib/hooks/use-meters";
 import { relativeTime, fullDateTime } from "@/lib/utils";
-import type { MeterOut } from "@/lib/types";
 import {
   BarChart3,
   History,
@@ -26,7 +25,6 @@ import {
   Clock,
   Settings,
 } from "lucide-react";
-import { toast } from "sonner";
 import {
   Tooltip,
   TooltipContent,
@@ -39,25 +37,9 @@ export default function MeterDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
-  const [meter, setMeter] = useState<MeterOut | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { data: meter, isLoading } = useMeter(id);
 
-  const fetchMeter = useCallback(async () => {
-    try {
-      const data = await api<MeterOut>(`/api/meters/${id}`);
-      setMeter(data);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to load meter");
-    } finally {
-      setLoading(false);
-    }
-  }, [id]);
-
-  useEffect(() => {
-    fetchMeter();
-  }, [fetchMeter]);
-
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="space-y-6">
         <Skeleton className="h-10 w-64" />

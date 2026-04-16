@@ -2,6 +2,7 @@
 // Locally, calls go directly to the backend.
 const IS_SERVER = typeof window === "undefined";
 const DIRECT_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+let redirectingToLogin = false;
 
 function getApiBase(): string {
   // On the client in production, use the proxy
@@ -31,10 +32,36 @@ export async function api<T>(path: string, options?: RequestInit): Promise<T> {
     ...options,
   });
 
-  // On 401, redirect to login
+  // On 401, verify whether the app session is still valid first.
+  // In mocked auth mode, backend routes can return 401 while /api/auth/me stays valid.
   if (res.status === 401 && !IS_SERVER) {
-    window.location.href = "/login";
-    throw new Error("Session expired");
+    let hasValidSession = false;
+
+    try {
+      const me = await fetch("/api/auth/me", {
+        credentials: "same-origin",
+        cache: "no-store",
+      });
+      hasValidSession = me.ok;
+    } catch {
+      hasValidSession = false;
+    }
+
+    if (!hasValidSession && !redirectingToLogin) {
+      redirectingToLogin = true;
+      fetch("/api/auth/logout", {
+        method: "POST",
+        credentials: "same-origin",
+        keepalive: true,
+      })
+        .catch(() => {})
+        .finally(() => {
+          const from = encodeURIComponent(window.location.pathname || "/");
+          window.location.assign(`/login?from=${from}`);
+        });
+    }
+
+    throw new Error(hasValidSession ? "Request unauthorized" : "Session expired");
   }
 
   if (!res.ok) {

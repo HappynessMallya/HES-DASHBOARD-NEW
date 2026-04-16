@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { MeterSelector } from "@/components/shared/meter-selector";
 import { StatCard } from "@/components/shared/stat-card";
-import { api } from "@/lib/api";
+import { useMeters } from "@/lib/hooks/use-meters";
 import { formatNumber } from "@/lib/utils";
 import type { MeterOut, LiveReadResponse } from "@/lib/types";
 import {
@@ -67,7 +67,7 @@ function getLiveUrl(meterId: string, interval: string, objects: string[]): { typ
 }
 
 export default function LiveReadingsPage() {
-  const [meters, setMeters] = useState<MeterOut[]>([]);
+  const { data: meters = [] } = useMeters();
   const [selectedMeter, setSelectedMeter] = useState("");
   const [interval, setInterval_] = useState("5");
   const [selectedObjects, setSelectedObjects] = useState<Set<string>>(
@@ -80,12 +80,6 @@ export default function LiveReadingsPage() {
   const connectionRef = useRef<EventSource | WebSocket | null>(null);
   const reconnectRef = useRef<number>(0);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    api<MeterOut[]>("/api/meters")
-      .then(setMeters)
-      .catch(() => toast.error("Failed to load meters"));
-  }, []);
 
   const handleReading = useCallback((data: LiveReadResponse) => {
     setLatestReading(data.readings);
