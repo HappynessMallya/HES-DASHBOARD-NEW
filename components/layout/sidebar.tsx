@@ -4,7 +4,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
-import type { Role } from "@/lib/types";
 import type { LucideIcon } from "lucide-react";
 import {
   LayoutDashboard,
@@ -44,7 +43,7 @@ interface NavItem {
   href: string;
   label: string;
   icon: LucideIcon;
-  requiredRole?: Role;
+  requiredPermission?: string;
   badge?: React.ReactNode;
 }
 
@@ -64,43 +63,43 @@ const navGroups: NavGroup[] = [
   {
     label: "Devices",
     items: [
-      { href: "/meters", label: "Meters", icon: Gauge },
-      { href: "/profiles", label: "Meter Profiles", icon: Settings2 },
+      { href: "/meters", label: "Meters", icon: Gauge, requiredPermission: "meters.read" },
+      { href: "/profiles", label: "Meter Profiles", icon: Settings2, requiredPermission: "meters.read" },
       {
         href: "/meters/import",
         label: "Batch Import",
         icon: Upload,
-        requiredRole: "device_management",
+        requiredPermission: "meters.create",
       },
       { href: "/groups", label: "Device Groups", icon: FolderTree },
       {
         href: "/firmware",
         label: "Firmware",
         icon: HardDrive,
-        requiredRole: "device_management",
+        requiredPermission: "firmware.read",
       },
     ],
   },
   {
     label: "Network",
     items: [
-      { href: "/topology", label: "Topology", icon: Network },
+      { href: "/topology", label: "Topology", icon: Network, requiredPermission: "topology.read" },
       { href: "/map", label: "GIS Map", icon: MapPin },
     ],
   },
   {
     label: "Monitoring",
     items: [
-      { href: "/live", label: "Live Readings", icon: Radio },
+      { href: "/live", label: "Live Readings", icon: Radio, requiredPermission: "meters.read" },
       { href: "/alerts", label: "Alerts", icon: Bell },
-      { href: "/notifications", label: "Notifications", icon: BellRing },
+      { href: "/notifications", label: "Notifications", icon: BellRing, requiredPermission: "notifications.read" },
     ],
   },
   {
     label: "Analytics",
     items: [
-      { href: "/reports", label: "Reports", icon: FileBarChart },
-      { href: "/mdms", label: "MDMS Interface", icon: Network },
+      { href: "/reports", label: "Reports", icon: FileBarChart, requiredPermission: "reports.read" },
+      { href: "/mdms", label: "MDMS Interface", icon: Network, requiredPermission: "cim.read" },
     ],
   },
   {
@@ -110,19 +109,19 @@ const navGroups: NavGroup[] = [
         href: "/admin/users",
         label: "User Management",
         icon: Users,
-        requiredRole: "user_admin",
+        requiredPermission: "users.read",
       },
       {
         href: "/admin/roles",
         label: "Role Management",
         icon: Shield,
-        requiredRole: "user_admin",
+        requiredPermission: "roles.read",
       },
       {
         href: "/admin/permissions",
         label: "Permissions",
         icon: Lock,
-        requiredRole: "user_admin",
+        requiredPermission: "users.update",
       },
       { href: "/health", label: "Health Status", icon: HeartPulse },
     ],
@@ -136,7 +135,7 @@ function NavContent({
   pathname: string;
   onClose?: () => void;
 }) {
-  const { user, logout, hasRole } = useAuth();
+  const { user, logout, can, loading } = useAuth();
 
   return (
     <div className="flex h-full flex-col">
@@ -160,7 +159,7 @@ function NavContent({
       >
         {navGroups.map((group) => {
           const visibleItems = group.items.filter(
-            (item) => !item.requiredRole || hasRole(item.requiredRole)
+            (item) => !item.requiredPermission || loading || can(item.requiredPermission)
           );
           if (visibleItems.length === 0) return null;
 

@@ -2,15 +2,25 @@
 export type Role = "data_access" | "operations" | "device_management" | "user_admin";
 
 export interface Permission {
+  id: number;
+  module_id: number;
+  action: string;
+  description: string;
   code: string;
-  module: string;
-  description?: string;
+}
+
+export interface ModuleOut {
+  id: number;
+  name: string;
+  description: string;
 }
 
 export interface RoleOut {
   id: number;
   name: string;
-  permissions?: string[];
+  description?: string;
+  is_system?: boolean;
+  permissions?: Permission[];
 }
 
 export interface User {

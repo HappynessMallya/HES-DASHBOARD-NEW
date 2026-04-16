@@ -31,9 +31,9 @@ import {
   useRoles,
   useCreateRole,
   useDeleteRole,
-  useModules,
   usePermissions,
 } from "@/lib/hooks/use-auth-admin";
+import type { Permission } from "@/lib/types";
 import { Shield, Plus, Trash2 } from "lucide-react";
 
 export default function RolesPage() {
@@ -80,45 +80,54 @@ export default function RolesPage() {
                 <TableRow>
                   <TableHead>ID</TableHead>
                   <TableHead>Name</TableHead>
+                  <TableHead>Description</TableHead>
                   <TableHead>Permissions</TableHead>
                   <TableHead className="w-12"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {roles.map((role) => (
-                  <TableRow key={role.id}>
-                    <TableCell>{role.id}</TableCell>
-                    <TableCell className="font-medium">{role.name}</TableCell>
-                    <TableCell>
-                      <div className="flex flex-wrap gap-1">
-                        {role.permissions?.slice(0, 5).map((p) => (
-                          <Badge key={p} variant="outline" className="text-xs">
-                            {p}
-                          </Badge>
-                        ))}
-                        {(role.permissions?.length ?? 0) > 5 && (
-                          <Badge variant="secondary" className="text-xs">
-                            +{(role.permissions?.length ?? 0) - 5} more
-                          </Badge>
+                {roles.map((role) => {
+                  const perms = role.permissions ?? [];
+                  return (
+                    <TableRow key={role.id}>
+                      <TableCell>{role.id}</TableCell>
+                      <TableCell className="font-medium">{role.name}</TableCell>
+                      <TableCell className="text-sm text-[#6b7280]">
+                        {role.description ?? "—"}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-wrap gap-1">
+                          {perms.slice(0, 5).map((p) => (
+                            <Badge key={p.id} variant="outline" className="text-xs font-mono">
+                              {p.code}
+                            </Badge>
+                          ))}
+                          {perms.length > 5 && (
+                            <Badge variant="secondary" className="text-xs">
+                              +{perms.length - 5} more
+                            </Badge>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        {!role.is_system && (
+                          <Can permission="roles.delete">
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              onClick={() => handleDelete(role.id)}
+                              disabled={deleteRole.isPending}
+                              className="text-red-500 hover:text-red-700"
+                              aria-label="Delete role"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </Can>
                         )}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Can permission="roles.delete">
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          onClick={() => handleDelete(role.id)}
-                          disabled={deleteRole.isPending}
-                          className="text-red-500 hover:text-red-700"
-                          aria-label="Delete role"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </Can>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           )}
@@ -131,38 +140,38 @@ export default function RolesPage() {
 function AddRoleDialog() {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
-  const [selectedPerms, setSelectedPerms] = useState<Set<string>>(new Set());
-  const { data: modules } = useModules();
+  const [selectedPermIds, setSelectedPermIds] = useState<Set<number>>(new Set());
   const { data: allPerms } = usePermissions();
   const create = useCreateRole();
 
-  const togglePerm = (code: string) => {
-    setSelectedPerms((prev) => {
+  const togglePerm = (id: number) => {
+    setSelectedPermIds((prev) => {
       const next = new Set(prev);
-      if (next.has(code)) next.delete(code);
-      else next.add(code);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
       return next;
     });
   };
 
   const handleSubmit = async () => {
     try {
-      await create.mutateAsync({ name, permissions: Array.from(selectedPerms) });
+      await create.mutateAsync({ name, permission_ids: Array.from(selectedPermIds) });
       toast.success("Role created");
       setOpen(false);
       setName("");
-      setSelectedPerms(new Set());
+      setSelectedPermIds(new Set());
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to create role");
     }
   };
 
-  const permsByModule = (allPerms ?? []).reduce<Record<string, typeof allPerms>>((acc, p) => {
-    const mod = p.module || "other";
-    if (!acc[mod]) acc[mod] = [];
-    acc[mod]!.push(p);
-    return acc;
-  }, {});
+  // Group permissions by module
+  const permsByModule: Record<string, Permission[]> = {};
+  for (const p of allPerms ?? []) {
+    const mod = p.code.split(".")[0];
+    if (!permsByModule[mod]) permsByModule[mod] = [];
+    permsByModule[mod].push(p);
+  }
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -179,21 +188,26 @@ function AddRoleDialog() {
             <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="operator" />
           </div>
           <div>
-            <Label className="mb-2 block">Permissions</Label>
+            <Label className="mb-2 block">
+              Permissions ({selectedPermIds.size} selected)
+            </Label>
             {Object.entries(permsByModule).map(([mod, perms]) => (
               <div key={mod} className="mb-3">
-                <p className="text-xs font-semibold uppercase tracking-wider text-[#6b7280] mb-1">{mod}</p>
+                <p className="text-xs font-semibold uppercase tracking-wider text-[#6b7280] mb-1">
+                  {mod}
+                </p>
                 <div className="space-y-1">
-                  {perms?.map((p) => (
-                    <label key={p.code} className="flex items-center gap-2 text-sm cursor-pointer hover:bg-[#f0fdf4] rounded px-2 py-1">
+                  {perms.map((p) => (
+                    <label
+                      key={p.id}
+                      className="flex items-center gap-2 text-sm cursor-pointer hover:bg-[#f0fdf4] rounded px-2 py-1"
+                    >
                       <Switch
-                        checked={selectedPerms.has(p.code)}
-                        onCheckedChange={() => togglePerm(p.code)}
+                        checked={selectedPermIds.has(p.id)}
+                        onCheckedChange={() => togglePerm(p.id)}
                       />
                       <span className="font-mono text-xs">{p.code}</span>
-                      {p.description && (
-                        <span className="text-[#6b7280] text-xs">— {p.description}</span>
-                      )}
+                      <span className="text-[#6b7280] text-xs">— {p.description}</span>
                     </label>
                   ))}
                 </div>
@@ -206,7 +220,11 @@ function AddRoleDialog() {
         </div>
         <DialogFooter>
           <DialogClose render={<Button variant="outline" />}>Cancel</DialogClose>
-          <Button onClick={handleSubmit} disabled={!name || create.isPending} className="bg-[#16a34a] hover:bg-[#15803d]">
+          <Button
+            onClick={handleSubmit}
+            disabled={!name || create.isPending}
+            className="bg-[#16a34a] hover:bg-[#15803d]"
+          >
             {create.isPending ? "Creating..." : "Create Role"}
           </Button>
         </DialogFooter>

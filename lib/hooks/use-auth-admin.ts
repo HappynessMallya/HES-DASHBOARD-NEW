@@ -60,7 +60,7 @@ export function useRoles() {
 export function useCreateRole() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: { name: string; permissions: string[] }) =>
+    mutationFn: (data: { name: string; description?: string; permission_ids: number[] }) =>
       authService.createRole(data),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["roles"] }),
   });
@@ -69,7 +69,7 @@ export function useCreateRole() {
 export function useUpdateRole() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, data }: { id: number; data: { name?: string; permissions?: string[] } }) =>
+    mutationFn: ({ id, data }: { id: number; data: { name?: string; description?: string; permission_ids?: number[] } }) =>
       authService.updateRole(id, data),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["roles"] }),
   });
@@ -85,7 +85,7 @@ export function useDeleteRole() {
 
 export function useModules() {
   return useQuery({
-    queryKey: ["modules"],
+    queryKey: ["auth", "modules"],
     queryFn: authService.listModules,
     staleTime: STALE_TIMES.static,
   });
@@ -93,7 +93,7 @@ export function useModules() {
 
 export function usePermissions(module?: string) {
   return useQuery({
-    queryKey: ["permissions", module],
+    queryKey: ["auth", "permissions", module],
     queryFn: () => authService.listPermissions(module),
     staleTime: STALE_TIMES.static,
   });

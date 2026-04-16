@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
 import {
   Dialog,
   DialogContent,
@@ -39,7 +40,7 @@ import {
   useModules,
   useUpdateUser,
 } from "@/lib/hooks/use-auth-admin";
-import type { UserOut, RoleOut } from "@/lib/types";
+import type { UserOut, RoleOut, Permission } from "@/lib/types";
 import {
   Shield,
   Search,
@@ -50,63 +51,26 @@ import {
   X,
 } from "lucide-react";
 
-// All permission codes from the API spec
-const ALL_PERMISSIONS = [
-  { code: "meters.read", module: "meters", description: "View meters, readings, dashboard" },
-  { code: "meters.create", module: "meters", description: "Add/edit meters" },
-  { code: "meters.delete", module: "meters", description: "Delete meters" },
-  { code: "meters.schedule", module: "meters", description: "Configure reading schedules" },
-  { code: "prepayment.topup", module: "prepayment", description: "Top-up meter balance" },
-  { code: "prepayment.clear_credit", module: "prepayment", description: "Clear credit on meter" },
-  { code: "control.relay", module: "control", description: "Connect/disconnect relay" },
-  { code: "control.timesync", module: "control", description: "Sync meter time" },
-  { code: "control.clear_tamper", module: "control", description: "Clear tamper events" },
-  { code: "topology.read", module: "topology", description: "View topology tree" },
-  { code: "topology.create", module: "topology", description: "Add regions/substations/transformers" },
-  { code: "topology.update", module: "topology", description: "Edit topology & assign meters" },
-  { code: "topology.delete", module: "topology", description: "Delete topology elements" },
-  { code: "firmware.read", module: "firmware", description: "View firmware list" },
-  { code: "firmware.upload", module: "firmware", description: "Upload firmware images" },
-  { code: "firmware.deploy", module: "firmware", description: "Deploy firmware to devices" },
-  { code: "notifications.read", module: "notifications", description: "View alert rules" },
-  { code: "notifications.manage", module: "notifications", description: "Create/edit alert rules" },
-  { code: "reports.read", module: "reports", description: "View and generate reports" },
-  { code: "users.read", module: "users", description: "View user list" },
-  { code: "users.create", module: "users", description: "Create users" },
-  { code: "users.update", module: "users", description: "Edit users" },
-  { code: "users.delete", module: "users", description: "Delete users" },
-  { code: "roles.read", module: "roles", description: "View role list" },
-  { code: "roles.create", module: "roles", description: "Create/edit roles" },
-  { code: "roles.delete", module: "roles", description: "Delete roles" },
-  { code: "cim.read", module: "cim", description: "CIM integration read" },
-  { code: "cim.control", module: "cim", description: "CIM device control" },
-  { code: "cim.manage", module: "cim", description: "Webhook management" },
-  { code: "audit.read", module: "audit", description: "View audit logs" },
-];
-
-const MODULES = [...new Set(ALL_PERMISSIONS.map((p) => p.module))];
-
 export default function PermissionsPage() {
   const { data: users, isLoading: loadingUsers } = useUsers();
   const { data: roles, isLoading: loadingRoles } = useRoles();
-  const { data: backendPerms } = usePermissions();
+  const { data: allPerms } = usePermissions();
+  const { data: modules } = useModules();
   const [search, setSearch] = useState("");
   const [selectedUser, setSelectedUser] = useState<UserOut | null>(null);
   const [selectedRole, setSelectedRole] = useState<RoleOut | null>(null);
   const [view, setView] = useState<"users" | "roles">("users");
 
-  // Use backend permissions if available, otherwise use our static list
-  const permissionList = backendPerms?.length ? backendPerms : ALL_PERMISSIONS;
-
+  // Group permissions by module name
   const permsByModule = useMemo(() => {
-    const map: Record<string, typeof permissionList> = {};
-    for (const p of permissionList) {
-      const mod = p.module || "other";
+    const map: Record<string, Permission[]> = {};
+    for (const p of allPerms ?? []) {
+      const mod = p.code.split(".")[0];
       if (!map[mod]) map[mod] = [];
       map[mod].push(p);
     }
     return map;
-  }, [permissionList]);
+  }, [allPerms]);
 
   const filteredUsers = useMemo(() => {
     if (!users) return [];
@@ -134,8 +98,7 @@ export default function PermissionsPage() {
       </div>
 
       <p className="text-sm text-[#6b7280]">
-        Every user must be assigned permissions to perform operations. Permissions are managed through roles — assign
-        permissions to a role, then assign the role to users.
+        Permissions are managed through roles. Assign permissions to a role, then assign the role to users.
       </p>
 
       {/* View toggle + search */}
@@ -160,15 +123,9 @@ export default function PermissionsPage() {
             By Role
           </button>
         </div>
-
         <div className="relative flex-1 min-w-[200px] max-w-sm">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#6b7280]" />
-          <Input
-            placeholder={view === "users" ? "Search users..." : "Search roles..."}
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9"
-          />
+          <Input placeholder={view === "users" ? "Search users..." : "Search roles..."} value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
         </div>
       </div>
 
@@ -177,17 +134,12 @@ export default function PermissionsPage() {
         <Card className="border-[#bbf7d0]">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-[#14532d]">
-              <User className="h-5 w-5" />
-              User Permissions
+              <User className="h-5 w-5" /> User Permissions
             </CardTitle>
           </CardHeader>
           <CardContent>
             {loadingUsers ? (
-              <div className="space-y-2">
-                {Array.from({ length: 4 }).map((_, i) => (
-                  <Skeleton key={i} className="h-14 w-full" />
-                ))}
-              </div>
+              <div className="space-y-2">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-14 w-full" />)}</div>
             ) : !filteredUsers.length ? (
               <p className="py-8 text-center text-sm text-[#6b7280]">No users found</p>
             ) : (
@@ -214,42 +166,26 @@ export default function PermissionsPage() {
                         </TableCell>
                         <TableCell>
                           <Badge variant="outline" className="bg-[#dcfce7] text-[#15803d] border-[#bbf7d0]">
-                            {u.role?.name ?? u.roles?.join(", ") ?? "—"}
+                            {u.role?.name ?? "—"}
                           </Badge>
                         </TableCell>
                         <TableCell>
                           {perms.length > 0 ? (
                             <div className="flex flex-wrap gap-1">
                               {perms.slice(0, 3).map((p) => (
-                                <Badge key={p} variant="secondary" className="text-xs font-mono">
-                                  {p}
-                                </Badge>
+                                <Badge key={p} variant="secondary" className="text-xs font-mono">{p}</Badge>
                               ))}
-                              {perms.length > 3 && (
-                                <Badge variant="secondary" className="text-xs">
-                                  +{perms.length - 3} more
-                                </Badge>
-                              )}
+                              {perms.length > 3 && <Badge variant="secondary" className="text-xs">+{perms.length - 3} more</Badge>}
                             </div>
                           ) : (
-                            <span className="text-xs text-red-500 flex items-center gap-1">
-                              <X className="h-3 w-3" /> No permissions
-                            </span>
+                            <span className="text-xs text-red-500 flex items-center gap-1"><X className="h-3 w-3" /> No permissions</span>
                           )}
                         </TableCell>
                         <TableCell>
-                          <Badge variant={u.is_active ? "default" : "destructive"}>
-                            {u.is_active ? "Active" : "Inactive"}
-                          </Badge>
+                          <Badge variant={u.is_active ? "default" : "destructive"}>{u.is_active ? "Active" : "Inactive"}</Badge>
                         </TableCell>
                         <TableCell>
-                          <Button
-                            variant="ghost"
-                            size="icon-sm"
-                            onClick={() => setSelectedUser(u)}
-                            className="text-[#16a34a] hover:text-[#15803d]"
-                            aria-label="View permissions"
-                          >
+                          <Button variant="ghost" size="icon-sm" onClick={() => setSelectedUser(u)} className="text-[#16a34a] hover:text-[#15803d]" aria-label="View permissions">
                             <ChevronRight className="h-4 w-4" />
                           </Button>
                         </TableCell>
@@ -267,138 +203,106 @@ export default function PermissionsPage() {
       {view === "roles" && (
         <div className="grid gap-4 md:grid-cols-2">
           {loadingRoles ? (
-            Array.from({ length: 4 }).map((_, i) => (
-              <Skeleton key={i} className="h-40 w-full" />
-            ))
+            Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-40 w-full" />)
           ) : !filteredRoles.length ? (
             <p className="col-span-2 py-8 text-center text-sm text-[#6b7280]">No roles found</p>
           ) : (
-            filteredRoles.map((role) => (
-              <Card
-                key={role.id}
-                className="border-[#bbf7d0] cursor-pointer hover:border-[#16a34a] transition-colors"
-                onClick={() => setSelectedRole(role)}
-              >
-                <CardHeader className="pb-2">
-                  <CardTitle className="flex items-center justify-between text-sm">
-                    <span className="flex items-center gap-2 text-[#14532d]">
-                      <Shield className="h-4 w-4 text-[#16a34a]" />
-                      {role.name}
-                    </span>
-                    <Badge variant="secondary">
-                      {role.permissions?.length ?? 0} permissions
-                    </Badge>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {role.permissions && role.permissions.length > 0 ? (
-                    <div className="flex flex-wrap gap-1">
-                      {role.permissions.slice(0, 8).map((p) => (
-                        <Badge key={p} variant="outline" className="text-xs font-mono">
-                          {p}
-                        </Badge>
-                      ))}
-                      {role.permissions.length > 8 && (
-                        <Badge variant="secondary" className="text-xs">
-                          +{role.permissions.length - 8} more
-                        </Badge>
-                      )}
-                    </div>
-                  ) : (
-                    <p className="text-xs text-red-500 flex items-center gap-1">
-                      <X className="h-3 w-3" /> No permissions assigned
-                    </p>
-                  )}
-                </CardContent>
-              </Card>
-            ))
+            filteredRoles.map((role) => {
+              const perms = role.permissions ?? [];
+              return (
+                <Card key={role.id} className="border-[#bbf7d0] cursor-pointer hover:border-[#16a34a] transition-colors" onClick={() => setSelectedRole(role)}>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="flex items-center justify-between text-sm">
+                      <span className="flex items-center gap-2 text-[#14532d]">
+                        <Shield className="h-4 w-4 text-[#16a34a]" />
+                        {role.name}
+                        {role.is_system && <Badge variant="secondary" className="text-xs">System</Badge>}
+                      </span>
+                      <Badge variant="secondary">{perms.length} permissions</Badge>
+                    </CardTitle>
+                    {role.description && <p className="text-xs text-[#6b7280]">{role.description}</p>}
+                  </CardHeader>
+                  <CardContent>
+                    {perms.length > 0 ? (
+                      <div className="flex flex-wrap gap-1">
+                        {perms.slice(0, 8).map((p) => (
+                          <Badge key={p.id} variant="outline" className="text-xs font-mono">{p.code}</Badge>
+                        ))}
+                        {perms.length > 8 && <Badge variant="secondary" className="text-xs">+{perms.length - 8} more</Badge>}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-red-500 flex items-center gap-1"><X className="h-3 w-3" /> No permissions assigned</p>
+                    )}
+                  </CardContent>
+                </Card>
+              );
+            })
           )}
         </div>
       )}
 
-      {/* Permission matrix for all available permissions */}
+      {/* All Available Permissions reference */}
       <Card className="border-[#bbf7d0]">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-[#14532d]">
-            <Lock className="h-5 w-5" />
-            All Available Permissions
+            <Lock className="h-5 w-5" /> All Available Permissions
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="space-y-6">
-            {Object.entries(permsByModule).map(([mod, perms]) => (
-              <div key={mod}>
-                <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-[#6b7280] border-b border-[#bbf7d0] pb-1">
-                  {mod}
-                </h3>
-                <div className="grid gap-1 sm:grid-cols-2 lg:grid-cols-3">
-                  {perms.map((p) => (
-                    <div
-                      key={p.code}
-                      className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-[#f0fdf4]"
-                    >
-                      <Lock className="h-3.5 w-3.5 text-[#16a34a] shrink-0" />
-                      <div className="min-w-0">
-                        <span className="font-mono text-xs font-medium text-[#14532d]">{p.code}</span>
-                        {p.description && (
-                          <p className="text-xs text-[#6b7280] truncate">{p.description}</p>
-                        )}
-                      </div>
+          {!allPerms?.length ? (
+            <div className="space-y-2">{Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}</div>
+          ) : (
+            <div className="space-y-6">
+              {Object.entries(permsByModule).map(([mod, perms]) => {
+                const moduleInfo = (modules ?? []).find((m) => m.name === mod);
+                return (
+                  <div key={mod}>
+                    <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-[#6b7280] border-b border-[#bbf7d0] pb-1">
+                      {mod} {moduleInfo?.description ? `— ${moduleInfo.description}` : ""}
+                    </h3>
+                    <div className="grid gap-1 sm:grid-cols-2 lg:grid-cols-3">
+                      {perms.map((p) => (
+                        <div key={p.id} className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-[#f0fdf4]">
+                          <Lock className="h-3.5 w-3.5 text-[#16a34a] shrink-0" />
+                          <div className="min-w-0">
+                            <span className="font-mono text-xs font-medium text-[#14532d]">{p.code}</span>
+                            <p className="text-xs text-[#6b7280] truncate">{p.description}</p>
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </CardContent>
       </Card>
 
-      {/* User permissions detail dialog */}
+      {/* User detail dialog */}
       {selectedUser && (
-        <UserPermissionsDialog
-          user={selectedUser}
-          permsByModule={permsByModule}
-          onClose={() => setSelectedUser(null)}
-        />
+        <UserPermissionsDialog user={selectedUser} roles={roles ?? []} permsByModule={permsByModule} onClose={() => setSelectedUser(null)} />
       )}
 
       {/* Role permissions editor dialog */}
       {selectedRole && (
-        <RolePermissionsDialog
-          role={selectedRole}
-          permsByModule={permsByModule}
-          onClose={() => setSelectedRole(null)}
-        />
+        <RolePermissionsDialog role={selectedRole} allPerms={allPerms ?? []} permsByModule={permsByModule} onClose={() => setSelectedRole(null)} />
       )}
     </div>
   );
 }
 
-// --- User Permissions Dialog ---
-
-function UserPermissionsDialog({
-  user,
-  permsByModule,
-  onClose,
-}: {
-  user: UserOut;
-  permsByModule: Record<string, { code: string; module: string; description?: string }[]>;
-  onClose: () => void;
+function UserPermissionsDialog({ user, roles, permsByModule, onClose }: {
+  user: UserOut; roles: RoleOut[]; permsByModule: Record<string, Permission[]>; onClose: () => void;
 }) {
   const userPerms = new Set(user.permissions ?? []);
   const updateUser = useUpdateUser();
-  const { data: roles } = useRoles();
-  const [selectedRoleId, setSelectedRoleId] = useState<string>(
-    user.role?.id != null ? String(user.role.id) : ""
-  );
+  const [selectedRoleId, setSelectedRoleId] = useState<string>(user.role?.id != null ? String(user.role.id) : "");
 
   const handleChangeRole = async () => {
     if (!selectedRoleId) return;
     try {
-      await updateUser.mutateAsync({
-        id: user.id,
-        data: { role_id: Number(selectedRoleId) },
-      });
+      await updateUser.mutateAsync({ id: user.id, data: { role_id: Number(selectedRoleId) } });
       toast.success(`Role updated for ${user.full_name}`);
       onClose();
     } catch (err) {
@@ -410,102 +314,54 @@ function UserPermissionsDialog({
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <User className="h-5 w-5 text-[#16a34a]" />
-            {user.full_name}
-          </DialogTitle>
+          <DialogTitle className="flex items-center gap-2"><User className="h-5 w-5 text-[#16a34a]" /> {user.full_name}</DialogTitle>
         </DialogHeader>
-
         <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-2">
           <div className="rounded-lg bg-[#f0fdf4] p-3 text-sm space-y-1">
             <p><span className="font-medium text-[#14532d]">Username:</span> {user.username}</p>
             <p><span className="font-medium text-[#14532d]">Email:</span> {user.email}</p>
-            <p>
-              <span className="font-medium text-[#14532d]">Current Role:</span>{" "}
-              <Badge variant="outline" className="bg-[#dcfce7] text-[#15803d] border-[#bbf7d0]">
-                {user.role?.name ?? "—"}
-              </Badge>
-            </p>
+            <p><span className="font-medium text-[#14532d]">Current Role:</span> <Badge variant="outline" className="bg-[#dcfce7] text-[#15803d] border-[#bbf7d0]">{user.role?.name ?? "—"}</Badge></p>
           </div>
-
-          {/* Change role */}
-          {roles && roles.length > 0 && (
+          {roles.length > 0 && (
             <div className="space-y-2">
               <p className="text-sm font-medium text-[#14532d]">Assign Role</p>
               <div className="flex gap-2">
                 <Select value={selectedRoleId} onValueChange={(v) => setSelectedRoleId(v ?? "")}>
-                  <SelectTrigger className="flex-1">
-                    <SelectValue placeholder="Select role" />
-                  </SelectTrigger>
+                  <SelectTrigger className="flex-1"><SelectValue placeholder="Select role" /></SelectTrigger>
                   <SelectContent>
                     {roles.map((r) => (
-                      <SelectItem key={r.id} value={String(r.id)}>
-                        {r.name} ({r.permissions?.length ?? 0} permissions)
-                      </SelectItem>
+                      <SelectItem key={r.id} value={String(r.id)}>{r.name} ({r.permissions?.length ?? 0} permissions)</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
-                <Button
-                  onClick={handleChangeRole}
-                  disabled={!selectedRoleId || updateUser.isPending}
-                  className="bg-[#16a34a] hover:bg-[#15803d]"
-                >
+                <Button onClick={handleChangeRole} disabled={!selectedRoleId || updateUser.isPending} className="bg-[#16a34a] hover:bg-[#15803d]">
                   {updateUser.isPending ? "Saving..." : "Save"}
                 </Button>
               </div>
-              <p className="text-xs text-[#6b7280]">
-                Changing the role will update the user&apos;s permissions to match the new role.
-              </p>
             </div>
           )}
-
-          {/* Current permissions grid */}
           <div>
-            <p className="mb-2 text-sm font-medium text-[#14532d]">
-              Current Permissions ({userPerms.size})
-            </p>
-            {Object.entries(permsByModule).map(([mod, perms]) => {
-              const hasAny = perms.some((p) => userPerms.has(p.code));
-              if (!hasAny && userPerms.size > 0) return null;
-              return (
-                <div key={mod} className="mb-3">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-[#6b7280] mb-1">
-                    {mod}
-                  </p>
-                  <div className="space-y-0.5">
-                    {perms.map((p) => {
-                      const has = userPerms.has(p.code);
-                      return (
-                        <div
-                          key={p.code}
-                          className={`flex items-center gap-2 rounded px-2 py-1 text-sm ${
-                            has ? "bg-[#dcfce7]" : "opacity-50"
-                          }`}
-                        >
-                          {has ? (
-                            <Check className="h-3.5 w-3.5 text-[#16a34a] shrink-0" />
-                          ) : (
-                            <X className="h-3.5 w-3.5 text-[#6b7280] shrink-0" />
-                          )}
-                          <span className="font-mono text-xs">{p.code}</span>
-                          {p.description && (
-                            <span className="text-xs text-[#6b7280]">— {p.description}</span>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
+            <p className="mb-2 text-sm font-medium text-[#14532d]">Current Permissions ({userPerms.size})</p>
+            {Object.entries(permsByModule).map(([mod, perms]) => (
+              <div key={mod} className="mb-3">
+                <p className="text-xs font-semibold uppercase tracking-wider text-[#6b7280] mb-1">{mod}</p>
+                <div className="space-y-0.5">
+                  {perms.map((p) => {
+                    const has = userPerms.has(p.code);
+                    return (
+                      <div key={p.id} className={`flex items-center gap-2 rounded px-2 py-1 text-sm ${has ? "bg-[#dcfce7]" : "opacity-40"}`}>
+                        {has ? <Check className="h-3.5 w-3.5 text-[#16a34a] shrink-0" /> : <X className="h-3.5 w-3.5 text-[#6b7280] shrink-0" />}
+                        <span className="font-mono text-xs">{p.code}</span>
+                        <span className="text-xs text-[#6b7280]">— {p.description}</span>
+                      </div>
+                    );
+                  })}
                 </div>
-              );
-            })}
-            {userPerms.size === 0 && (
-              <p className="text-sm text-red-500 py-4 text-center">
-                This user has no permissions. Assign a role to grant permissions.
-              </p>
-            )}
+              </div>
+            ))}
+            {userPerms.size === 0 && <p className="text-sm text-red-500 py-4 text-center">No permissions. Assign a role to grant permissions.</p>}
           </div>
         </div>
-
         <DialogFooter>
           <DialogClose render={<Button variant="outline" />}>Close</DialogClose>
         </DialogFooter>
@@ -514,115 +370,72 @@ function UserPermissionsDialog({
   );
 }
 
-// --- Role Permissions Editor Dialog ---
-
-function RolePermissionsDialog({
-  role,
-  permsByModule,
-  onClose,
-}: {
-  role: RoleOut;
-  permsByModule: Record<string, { code: string; module: string; description?: string }[]>;
-  onClose: () => void;
+function RolePermissionsDialog({ role, allPerms, permsByModule, onClose }: {
+  role: RoleOut; allPerms: Permission[]; permsByModule: Record<string, Permission[]>; onClose: () => void;
 }) {
-  const [selectedPerms, setSelectedPerms] = useState<Set<string>>(
-    new Set(role.permissions ?? [])
-  );
+  const currentPermIds = new Set((role.permissions ?? []).map((p) => p.id));
+  const [selectedPermIds, setSelectedPermIds] = useState<Set<number>>(currentPermIds);
   const updateRole = useUpdateRole();
 
-  const togglePerm = (code: string) => {
-    setSelectedPerms((prev) => {
+  const togglePerm = (id: number) => {
+    setSelectedPermIds((prev) => {
       const next = new Set(prev);
-      if (next.has(code)) next.delete(code);
-      else next.add(code);
+      if (next.has(id)) next.delete(id); else next.add(id);
       return next;
     });
   };
 
-  const toggleModule = (mod: string, perms: { code: string }[]) => {
-    const allSelected = perms.every((p) => selectedPerms.has(p.code));
-    setSelectedPerms((prev) => {
+  const toggleModule = (perms: Permission[]) => {
+    const allSelected = perms.every((p) => selectedPermIds.has(p.id));
+    setSelectedPermIds((prev) => {
       const next = new Set(prev);
-      for (const p of perms) {
-        if (allSelected) next.delete(p.code);
-        else next.add(p.code);
-      }
+      for (const p of perms) { if (allSelected) next.delete(p.id); else next.add(p.id); }
       return next;
     });
   };
 
   const handleSave = async () => {
     try {
-      await updateRole.mutateAsync({
-        id: role.id,
-        data: { permissions: Array.from(selectedPerms) },
-      });
-      toast.success(`Permissions updated for role "${role.name}"`);
+      await updateRole.mutateAsync({ id: role.id, data: { permission_ids: Array.from(selectedPermIds) } });
+      toast.success(`Permissions updated for "${role.name}"`);
       onClose();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to update permissions");
+      toast.error(err instanceof Error ? err.message : "Failed to update");
     }
   };
 
-  const hasChanges =
-    selectedPerms.size !== (role.permissions?.length ?? 0) ||
-    Array.from(selectedPerms).some((p) => !role.permissions?.includes(p));
+  const hasChanges = selectedPermIds.size !== currentPermIds.size || [...selectedPermIds].some((id) => !currentPermIds.has(id));
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Shield className="h-5 w-5 text-[#16a34a]" />
-            Edit Permissions: {role.name}
-          </DialogTitle>
+          <DialogTitle className="flex items-center gap-2"><Shield className="h-5 w-5 text-[#16a34a]" /> Edit: {role.name}</DialogTitle>
         </DialogHeader>
-
         <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-2">
-          <p className="text-sm text-[#6b7280]">
-            Toggle permissions for this role. All users with the &quot;{role.name}&quot; role
-            will inherit these permissions.
-          </p>
-
+          {role.description && <p className="text-sm text-[#6b7280]">{role.description}</p>}
           <div className="rounded-lg bg-[#f0fdf4] p-2 text-sm text-center">
-            <span className="font-medium text-[#14532d]">{selectedPerms.size}</span>
-            <span className="text-[#6b7280]"> of {ALL_PERMISSIONS.length} permissions selected</span>
+            <span className="font-medium text-[#14532d]">{selectedPermIds.size}</span>
+            <span className="text-[#6b7280]"> of {allPerms.length} permissions selected</span>
           </div>
-
           {Object.entries(permsByModule).map(([mod, perms]) => {
-            const allSelected = perms.every((p) => selectedPerms.has(p.code));
-            const someSelected = perms.some((p) => selectedPerms.has(p.code));
+            const allSelected = perms.every((p) => selectedPermIds.has(p.id));
+            const someSelected = perms.some((p) => selectedPermIds.has(p.id));
             return (
               <div key={mod} className="border border-[#bbf7d0] rounded-lg overflow-hidden">
-                <button
-                  onClick={() => toggleModule(mod, perms)}
-                  className="w-full flex items-center justify-between px-3 py-2 bg-[#f0fdf4] hover:bg-[#dcfce7] transition-colors"
-                >
-                  <span className="text-xs font-semibold uppercase tracking-wider text-[#14532d]">
-                    {mod}
-                  </span>
-                  <Badge
-                    variant={allSelected ? "default" : someSelected ? "secondary" : "outline"}
-                    className="text-xs"
-                  >
-                    {perms.filter((p) => selectedPerms.has(p.code)).length}/{perms.length}
+                <button onClick={() => toggleModule(perms)} className="w-full flex items-center justify-between px-3 py-2 bg-[#f0fdf4] hover:bg-[#dcfce7] transition-colors">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-[#14532d]">{mod}</span>
+                  <Badge variant={allSelected ? "default" : someSelected ? "secondary" : "outline"} className="text-xs">
+                    {perms.filter((p) => selectedPermIds.has(p.id)).length}/{perms.length}
                   </Badge>
                 </button>
                 <div className="p-2 space-y-1">
                   {perms.map((p) => (
-                    <label
-                      key={p.code}
-                      className="flex items-center gap-2 rounded px-2 py-1.5 text-sm cursor-pointer hover:bg-[#f0fdf4]"
-                    >
-                      <Switch
-                        checked={selectedPerms.has(p.code)}
-                        onCheckedChange={() => togglePerm(p.code)}
-                      />
+                    <label key={p.id} className="flex items-center gap-2 rounded px-2 py-1.5 text-sm cursor-pointer hover:bg-[#f0fdf4]">
+                      <Switch checked={selectedPermIds.has(p.id)} onCheckedChange={() => togglePerm(p.id)} />
                       <div className="min-w-0 flex-1">
                         <span className="font-mono text-xs font-medium">{p.code}</span>
-                        {p.description && (
-                          <p className="text-xs text-[#6b7280]">{p.description}</p>
-                        )}
+                        <p className="text-xs text-[#6b7280]">{p.description}</p>
                       </div>
                     </label>
                   ))}
@@ -631,14 +444,9 @@ function RolePermissionsDialog({
             );
           })}
         </div>
-
         <DialogFooter>
           <DialogClose render={<Button variant="outline" />}>Cancel</DialogClose>
-          <Button
-            onClick={handleSave}
-            disabled={!hasChanges || updateRole.isPending}
-            className="bg-[#16a34a] hover:bg-[#15803d]"
-          >
+          <Button onClick={handleSave} disabled={!hasChanges || updateRole.isPending} className="bg-[#16a34a] hover:bg-[#15803d]">
             {updateRole.isPending ? "Saving..." : "Save Permissions"}
           </Button>
         </DialogFooter>

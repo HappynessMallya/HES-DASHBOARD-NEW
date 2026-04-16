@@ -1,6 +1,6 @@
 "use client";
 
-import { useAuthStore } from "@/lib/stores/auth-store";
+import { useAuth } from "@/lib/auth-context";
 
 export function Can({
   permission,
@@ -11,6 +11,10 @@ export function Can({
   children: React.ReactNode;
   fallback?: React.ReactNode;
 }) {
-  const can = useAuthStore((s) => s.can);
+  const { can, loading } = useAuth();
+
+  // While auth is loading, don't render permission-gated content
+  if (loading) return null;
+
   return can(permission) ? <>{children}</> : <>{fallback}</>;
 }

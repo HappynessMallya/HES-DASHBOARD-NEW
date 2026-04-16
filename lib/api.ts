@@ -1,23 +1,17 @@
-// In production (Vercel), API calls go through /api/proxy to avoid mixed-content.
-// Locally, calls go directly to the backend.
+// All client-side API calls go through /api/proxy so the httpOnly cookie
+// is forwarded as a Bearer token to the backend.
+// Server-side calls (SSR) go directly to the backend.
 const IS_SERVER = typeof window === "undefined";
 const DIRECT_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 let redirectingToLogin = false;
 
 function getApiBase(): string {
-  // On the client in production, use the proxy
-  if (!IS_SERVER && window.location.protocol === "https:") {
+  // Client-side: always use the proxy so the httpOnly cookie gets forwarded
+  if (!IS_SERVER) {
     return "/api/proxy";
   }
-  // Locally or server-side, call the backend directly
+  // Server-side (SSR): call the backend directly
   return DIRECT_URL;
-}
-
-function getAuthHeaders(): HeadersInit {
-  // Auth token is stored in httpOnly cookie and forwarded by the proxy route.
-  // On the client through proxy, the browser sends the cookie automatically.
-  // No need to manually attach the token here — the proxy route reads it.
-  return {};
 }
 
 export async function api<T>(path: string, options?: RequestInit): Promise<T> {
@@ -25,7 +19,6 @@ export async function api<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${base}${path}`, {
     headers: {
       "Content-Type": "application/json",
-      ...getAuthHeaders(),
       ...options?.headers,
     },
     credentials: "same-origin",

@@ -5,6 +5,7 @@ import type {
   RoleOut,
   ChangePasswordRequest,
   Permission,
+  ModuleOut,
 } from "../types";
 
 export const authService = {
@@ -26,12 +27,12 @@ export const authService = {
 
   // Roles
   listRoles: () => api<RoleOut[]>("/api/auth/roles"),
-  createRole: (data: { name: string; permissions: string[] }) =>
+  createRole: (data: { name: string; description?: string; permission_ids: number[] }) =>
     api<RoleOut>("/api/auth/roles", {
       method: "POST",
       body: JSON.stringify(data),
     }),
-  updateRole: (id: number, data: { name?: string; permissions?: string[] }) =>
+  updateRole: (id: number, data: { name?: string; description?: string; permission_ids?: number[] }) =>
     api<RoleOut>(`/api/auth/roles/${id}`, {
       method: "PATCH",
       body: JSON.stringify(data),
@@ -40,7 +41,7 @@ export const authService = {
     api<void>(`/api/auth/roles/${id}`, { method: "DELETE" }),
 
   // Modules & Permissions
-  listModules: () => api<string[]>("/api/auth/modules"),
+  listModules: () => api<ModuleOut[]>("/api/auth/modules"),
   listPermissions: (module?: string) => {
     const qs = module ? `?module=${module}` : "";
     return api<Permission[]>(`/api/auth/permissions${qs}`);
